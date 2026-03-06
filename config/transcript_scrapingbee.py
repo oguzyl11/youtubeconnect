@@ -3,6 +3,7 @@ ScrapingBee API ile YouTube transkript çekme – proxy + JS rendering, engelden
 """
 import json
 import re
+import xml.etree.ElementTree as ET
 from typing import Optional, Tuple
 
 from django.conf import settings
@@ -18,6 +19,72 @@ def _parse_ts_to_seconds(ts_text: str) -> float:
     if len(parts) == 1:
         return int(parts[0])
     return 0.0
+
+
+def _fetch_caption_track_from_page(html: bytes, client) -> Tuple[list, Optional[str]]:
+    """Sayfa HTML'inde captionTracks baseUrl arar, ScrapingBee ile çeker, segment listesi döner."""
+    try:
+        text = html.decode("utf-8", errors="ignore")
+    except Exception:
+        return [], None
+    # YouTube sayfasında captionTracks baseUrl (bazen escape'li)
+    base_url_match = re.search(
+        r'"baseUrl"\s*:\s*"((?:https?:)?[^"]+timedtext[^"]*)"',
+        text,
+    )
+    if not base_url_match:
+        base_url_match = re.search(
+            r'baseUrl["\s:]+"(https?[^"]+)"',
+            text,
+        )
+    if not base_url_match:
+        return [], None
+    caption_url = (
+        base_url_match.group(1)
+        .replace("\\u0026", "&")
+        .replace("\\/", "/")
+        .replace("\\u003d", "=")
+        .replace("\\u003f", "?")
+    )
+    if "timedtext" not in caption_url and "caption" not in caption_url.lower():
+        return [], None
+    try:
+        resp = client.get(caption_url, params={"timeout": 15000})
+    except Exception:
+        return [], None
+    if resp.status_code != 200 or not resp.content:
+        return [], None
+    body = resp.content.decode("utf-8", errors="ignore").strip()
+    segments_raw = []
+    if "<transcript>" in body or "<text " in body:
+        try:
+            root = ET.fromstring(resp.content)
+            for elem in root.findall(".//text"):
+                start = float(elem.get("start", 0))
+                dur = float(elem.get("dur", 5))
+                text = (elem.text or "").strip()
+                if text:
+                    segments_raw.append({"text": text, "start": start})
+        except Exception:
+            pass
+    if not segments_raw and ("[" in body and '"text"' in body):
+        try:
+            data = json.loads(body)
+            events = data.get("events", data) if isinstance(data, dict) else []
+            if not isinstance(events, list):
+                events = data if isinstance(data, list) else []
+            for ev in events:
+                segs = ev.get("segs", [])
+                text = "".join(s.get("utf8", s.get("text", "")) for s in segs).strip()
+                if not text or text == "\\n":
+                    continue
+                start = ev.get("tStartMs", 0) / 1000.0
+                segments_raw.append({"text": text, "start": start})
+        except Exception:
+            pass
+    if segments_raw:
+        return segments_raw, None
+    return [], None
 
 
 def fetch_transcript_scrapingbee(video_id: str) -> Tuple[list, Optional[str]]:
@@ -65,7 +132,16 @@ def fetch_transcript_scrapingbee(video_id: str) -> Tuple[list, Optional[str]]:
         return [], f"ScrapingBee istek hatası: {e}"
 
     if response.status_code != 200:
-        return [], f"ScrapingBee HTTP {response.status_code}"
+        msg = f"ScrapingBee HTTP {response.status_code}"
+        if response.status_code == 401:
+            msg = "ScrapingBee API key geçersiz veya eksik. .env dosyasında SCRAPINGBEE_API_KEY kontrol edin."
+        elif response.status_code == 403:
+            msg = "ScrapingBee erişim reddedildi (API key veya kota). Dashboard: https://www.scrapingbee.com"
+        elif response.status_code == 429:
+            msg = "ScrapingBee kota aşıldı. Biraz bekleyin veya planı yükseltin."
+        elif response.status_code >= 500:
+            msg = f"ScrapingBee sunucu hatası ({response.status_code}). Kısa süre sonra tekrar deneyin."
+        return [], msg
 
     html = response.content
     if not html:
@@ -79,7 +155,17 @@ def fetch_transcript_scrapingbee(video_id: str) -> Tuple[list, Optional[str]]:
     soup = BeautifulSoup(html, "html.parser")
     container = soup.select_one("#segments-container")
     if not container:
-        return [], "ScrapingBee yanıt verdi ancak transkript alanı bulunamadı (YouTube arayüzü değişmiş veya video altyazı desteklemiyor olabilir)."
+        # Yedek: sayfa kaynağındaki caption track URL'sini al, ScrapingBee ile çek
+        segments_raw, err = _fetch_caption_track_from_page(html, client)
+        if segments_raw:
+            result = []
+            for i, item in enumerate(segments_raw):
+                start = float(item.get("start") or 0)
+                next_start = segments_raw[i + 1].get("start") if i + 1 < len(segments_raw) else start + 5
+                duration = max(0.1, next_start - start) if isinstance(next_start, (int, float)) else 5.0
+                result.append({"text": item["text"], "start": start, "duration": duration})
+            return result, None
+        return [], err or "Transkript alanı bulunamadı (video altyazı desteklemiyor olabilir)."
 
     segments_raw = []
     for seg in container.select("ytd-transcript-segment-renderer"):

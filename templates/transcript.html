@@ -10,7 +10,7 @@
   .transcript-box button { margin-top: 0.75rem; padding: 0.6rem 1.25rem; font-size: 1rem; background: #c00; color: #fff; border: none; border-radius: 6px; cursor: pointer; }
   .transcript-box button:hover { background: #a00; }
   .transcript-box button:disabled { opacity: 0.6; cursor: not-allowed; }
-  .error { color: #c00; margin-top: 0.5rem; }
+  .error { color: #c00; margin-top: 0.75rem; padding: 0.75rem; background: #fff0f0; border: 1px solid #fcc; border-radius: 6px; font-size: 0.95rem; }
   .result { margin-top: 1.5rem; padding: 1rem; background: #f5f5f5; border-radius: 8px; white-space: pre-wrap; max-height: 60vh; overflow-y: auto; }
   .result h3 { margin-top: 0; font-size: 1.1rem; }
   .segment { margin-bottom: 0.5rem; }
@@ -76,8 +76,12 @@
     })
     .then(function(r) {
       return r.json().then(function(data) {
-        if (!r.ok) throw new Error(data.error || 'İstek başarısız');
+        var errMsg = (data && typeof data.error === 'string') ? data.error : (data && data.error ? String(data.error) : 'İstek başarısız.');
+        if (!r.ok) throw new Error(errMsg);
         return data;
+      }).catch(function(e) {
+        if (e instanceof SyntaxError) throw new Error('Sunucu yanıtı okunamadı.');
+        throw e;
       });
     })
     .then(function(data) {
