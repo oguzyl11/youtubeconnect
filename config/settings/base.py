@@ -117,16 +117,5 @@ TRANSCRIPT_CACHE_KEY_PREFIX = "yt_transcript:"
 # API rate limit: dakikada en fazla istek (IP başına)
 TRANSCRIPT_RATE_LIMIT_PER_MINUTE = 10
 
-# ScrapingBee – öncelikli (API key varsa), engelden kaçınma
-SCRAPINGBEE_API_KEY = os.environ.get("SCRAPINGBEE_API_KEY", "").strip() or None
-TRANSCRIPT_USE_SCRAPINGBEE = bool(SCRAPINGBEE_API_KEY) and os.environ.get("TRANSCRIPT_USE_SCRAPINGBEE", "true").lower() in ("1", "true", "yes")
-
-# Browser (Playwright) scraper – ScrapingBee yoksa veya başarısızsa
-TRANSCRIPT_USE_BROWSER_SCRAPER = os.environ.get("TRANSCRIPT_USE_BROWSER_SCRAPER", "true").lower() in ("1", "true", "yes")
-TRANSCRIPT_BROWSER_TIMEOUT = int(os.environ.get("TRANSCRIPT_BROWSER_TIMEOUT", "30000"))
-TRANSCRIPT_BROWSER_HEADLESS = os.environ.get("TRANSCRIPT_BROWSER_HEADLESS", "true").lower() in ("1", "true", "yes")
-
-# YouTube proxy (browser ve API için)
-YOUTUBE_PROXY = os.environ.get("YOUTUBE_PROXY", "").strip() or None
-YOUTUBE_HTTP_PROXY = os.environ.get("YOUTUBE_HTTP_PROXY", "").strip() or None
-YOUTUBE_HTTPS_PROXY = os.environ.get("YOUTUBE_HTTPS_PROXY", "").strip() or None
+# Transkript: sadece ScrapingBee (Docker: env_file: .env ile SCRAPINGBEE_API_KEY gelir)
+SCRAPINGBEE_API_KEY = (os.environ.get("SCRAPINGBEE_API_KEY") or "").strip() or None

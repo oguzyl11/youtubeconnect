@@ -31,12 +31,16 @@ def fetch_transcript_scrapingbee(video_id: str) -> Tuple[list, Optional[str]]:
 
     url = f"https://www.youtube.com/watch?v={video_id}"
 
-    # Transkript butonunu aç, segmentleri bekle
+    # Transkript panelini aç: sayfa yüklensin, kaydır, butona tıkla (iki olası selector), segmentleri bekle
     js_scenario = {
         "instructions": [
+            {"wait": 4000},
+            {"scroll_y": 500},
             {"wait": 2000},
             {"wait_for_and_click": "ytd-video-description-transcript-section-renderer button"},
-            {"wait": 2500},
+            {"wait": 1500},
+            {"wait_for_and_click": "[data-target-id='engagement-panel-transcript'] button"},
+            {"wait": 3000},
             {"wait_for": "#segments-container"},
         ],
         "strict": False,
@@ -54,7 +58,7 @@ def fetch_transcript_scrapingbee(video_id: str) -> Tuple[list, Optional[str]]:
             params={
                 "render_js": True,
                 "js_scenario": json.dumps(js_scenario),
-                "timeout": 40000,
+                "timeout": 60000,
             },
         )
     except Exception as e:
@@ -75,7 +79,7 @@ def fetch_transcript_scrapingbee(video_id: str) -> Tuple[list, Optional[str]]:
     soup = BeautifulSoup(html, "html.parser")
     container = soup.select_one("#segments-container")
     if not container:
-        return [], "Transkript alanı bulunamadı (video altyazı desteklemiyor olabilir)."
+        return [], "ScrapingBee yanıt verdi ancak transkript alanı bulunamadı (YouTube arayüzü değişmiş veya video altyazı desteklemiyor olabilir)."
 
     segments_raw = []
     for seg in container.select("ytd-transcript-segment-renderer"):

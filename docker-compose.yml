@@ -17,6 +17,7 @@ services:
     env_file: .env
     environment:
       - DJANGO_SETTINGS_MODULE=config.settings.production
+      - SCRAPINGBEE_API_KEY=${SCRAPINGBEE_API_KEY:-}
     volumes:
       - static_volume:/app/staticfiles
     ports:

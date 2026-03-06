@@ -41,43 +41,9 @@ def extract_youtube_video_id(url: str) -> Optional[str]:
     return None
 
 
-def _fetch_via_api(video_id: str) -> tuple[list, Optional[str]]:
-    """youtube-transcript-api ile dener (fallback)."""
-    try:
-        from youtube_transcript_api import YouTubeTranscriptApi
-        from youtube_transcript_api._errors import YouTubeTranscriptApiException
-        from youtube_transcript_api.proxies import GenericProxyConfig
-    except ImportError:
-        return [], "Transkript servisi yapılandırılmamış."
-
-    proxy_config = None
-    http_p = getattr(settings, "YOUTUBE_HTTP_PROXY", None) or None
-    https_p = getattr(settings, "YOUTUBE_HTTPS_PROXY", None) or None
-    single_p = getattr(settings, "YOUTUBE_PROXY", None) or None
-    if single_p:
-        http_p = http_p or single_p
-        https_p = https_p or single_p
-    if http_p or https_p:
-        try:
-            proxy_config = GenericProxyConfig(http_url=http_p, https_url=https_p)
-        except Exception:
-            proxy_config = None
-    try:
-        api = YouTubeTranscriptApi(proxy_config=proxy_config)
-        fetched = api.fetch(video_id, languages=("tr", "en"))
-        return [
-            {"text": s.text, "start": s.start, "duration": s.duration}
-            for s in fetched.snippets
-        ], None
-    except YouTubeTranscriptApiException as e:
-        return [], str(e)
-    except Exception as e:
-        return [], f"Transkript alınamadı: {e}"
-
-
 def get_transcript_for_video(video_id: str) -> tuple[list, Optional[str]]:
     """
-    Video ID için transkript döner. Önce cache, sonra ScrapingBee -> browser (Playwright) -> API.
+    Video ID için transkript döner. Sadece ScrapingBee kullanılır (cache + SCRAPINGBEE_API_KEY).
     Returns: (segments, error_message)
     """
     prefix = getattr(settings, "TRANSCRIPT_CACHE_KEY_PREFIX", "yt_transcript:")
@@ -88,30 +54,15 @@ def get_transcript_for_video(video_id: str) -> tuple[list, Optional[str]]:
     if cached is not None:
         return cached, None
 
-    result, error = [], None
+    api_key = (getattr(settings, "SCRAPINGBEE_API_KEY", None) or "").strip()
+    if not api_key:
+        return [], "SCRAPINGBEE_API_KEY .env dosyasında ayarlanmalı (https://www.scrapingbee.com)."
 
-    # 1) ScrapingBee (API key varsa, engelden kaçınma için öncelikli)
-    use_scrapingbee = getattr(settings, "TRANSCRIPT_USE_SCRAPINGBEE", True)
-    if use_scrapingbee and (getattr(settings, "SCRAPINGBEE_API_KEY", None) or "").strip():
-        try:
-            from config.transcript_scrapingbee import fetch_transcript_scrapingbee
-            result, error = fetch_transcript_scrapingbee(video_id)
-        except Exception as e:
-            error = str(e)
-
-    # 2) Playwright browser scraper
-    if not result and error:
-        use_browser = getattr(settings, "TRANSCRIPT_USE_BROWSER_SCRAPER", True)
-        if use_browser:
-            try:
-                from config.transcript_scraper import fetch_transcript_browser
-                result, error = fetch_transcript_browser(video_id)
-            except Exception as e:
-                error = str(e)
-
-    # 3) youtube-transcript-api fallback
-    if not result and error:
-        result, error = _fetch_via_api(video_id)
+    try:
+        from config.transcript_scrapingbee import fetch_transcript_scrapingbee
+        result, error = fetch_transcript_scrapingbee(video_id)
+    except Exception as e:
+        return [], str(e)
 
     if result:
         cache.set(cache_key, result, timeout=timeout)
