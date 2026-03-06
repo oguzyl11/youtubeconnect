@@ -103,3 +103,16 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 CORS_ALLOWED_ORIGINS = env.list("CORS_ALLOWED_ORIGINS")
 CSRF_TRUSTED_ORIGINS = env.list("CSRF_TRUSTED_ORIGINS")
+
+# Transkript cache backend
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+        "OPTIONS": {"MAX_ENTRIES": 1000},
+    }
+}
+# Transkript cache (YouTube’a tekrar istek atmamak için, 1 saat)
+TRANSCRIPT_CACHE_TIMEOUT = 3600
+TRANSCRIPT_CACHE_KEY_PREFIX = "yt_transcript:"
+# API rate limit: dakikada en fazla istek (IP başına)
+TRANSCRIPT_RATE_LIMIT_PER_MINUTE = 10

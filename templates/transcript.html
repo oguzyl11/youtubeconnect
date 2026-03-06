@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+
+{% block title %}YouTube Transkript{% endblock %}
+
+{% block extra_head %}
+<style>
+  .transcript-box { max-width: 42rem; margin: 0 auto 2rem; }
+  .transcript-box label { display: block; margin-bottom: 0.5rem; font-weight: 600; }
+  .transcript-box input[type="url"] { width: 100%; padding: 0.6rem 0.75rem; font-size: 1rem; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; }
+  .transcript-box button { margin-top: 0.75rem; padding: 0.6rem 1.25rem; font-size: 1rem; background: #c00; color: #fff; border: none; border-radius: 6px; cursor: pointer; }
+  .transcript-box button:hover { background: #a00; }
+  .transcript-box button:disabled { opacity: 0.6; cursor: not-allowed; }
+  .error { color: #c00; margin-top: 0.5rem; }
+  .result { margin-top: 1.5rem; padding: 1rem; background: #f5f5f5; border-radius: 8px; white-space: pre-wrap; max-height: 60vh; overflow-y: auto; }
+  .result h3 { margin-top: 0; font-size: 1.1rem; }
+  .segment { margin-bottom: 0.5rem; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="transcript-box">
+  <h1>YouTube transkript</h1>
+  <p>Video linkini girin, altyazı metnini alın.</p>
+  <form id="transcript-form">
+    {% csrf_token %}
+    <label for="youtube-url">YouTube video URL</label>
+    <input type="url" id="youtube-url" name="url" placeholder="https://www.youtube.com/watch?v=..." required>
+    <button type="submit" id="submit-btn">Transkript al</button>
+  </form>
+  <p id="error" class="error" style="display:none;"></p>
+  <div id="result" style="display:none;">
+    <h3>Transkript</h3>
+    <div id="result-content" class="result"></div>
+  </div>
+</div>
+
+<script>
+(function() {
+  var form = document.getElementById('transcript-form');
+  var input = document.getElementById('youtube-url');
+  var submitBtn = document.getElementById('submit-btn');
+  var errorEl = document.getElementById('error');
+  var resultEl = document.getElementById('result');
+  var resultContent = document.getElementById('result-content');
+
+  function showError(msg) {
+    errorEl.textContent = msg || '';
+    errorEl.style.display = msg ? 'block' : 'none';
+  }
+  function showResult(html) {
+    resultContent.innerHTML = html;
+    resultEl.style.display = 'block';
+    showError('');
+  }
+
+  form.addEventListener('submit', function(e) {
+    e.preventDefault();
+    var url = (input.value || '').trim();
+    if (!url) return;
+    submitBtn.disabled = true;
+    showError('');
+    resultEl.style.display = 'none';
+
+    var csrf = document.querySelector('[name=csrfmiddlewaretoken]');
+    var body = JSON.stringify({ url: url });
+    var headers = {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json'
+    };
+    if (csrf) headers['X-CSRFToken'] = csrf.value;
+
+    fetch('/api/transcript/', {
+      method: 'POST',
+      headers: headers,
+      body: body
+    })
+    .then(function(r) {
+      return r.json().then(function(data) {
+        if (!r.ok) throw new Error(data.error || 'İstek başarısız');
+        return data;
+      });
+    })
+    .then(function(data) {
+      var html = '';
+      if (data.segments && data.segments.length) {
+        html += '<p><strong>Video ID:</strong> ' + (data.video_id || '') + '</p>';
+        html += '<div class="segments">';
+        data.segments.forEach(function(s) {
+          html += '<div class="segment">' + escapeHtml(s.text) + '</div>';
+        });
+        html += '</div>';
+      } else {
+        html = '<p>' + escapeHtml(data.full_text || 'Metin yok.') + '</p>';
+      }
+      showResult(html);
+    })
+    .catch(function(err) {
+      showError(err.message || 'Bir hata oluştu.');
+    })
+    .finally(function() {
+      submitBtn.disabled = false;
+    });
+  });
+
+  function escapeHtml(s) {
+    if (!s) return '';
+    var div = document.createElement('div');
+    div.textContent = s;
+    return div.innerHTML;
+  }
+})();
+</script>
+{% endblock %}
