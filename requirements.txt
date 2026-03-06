@@ -1,0 +1,19 @@
+# Django & core
+Django>=4.2,<6.0
+django-environ>=0.11.2
+
+# Production WSGI server
+gunicorn>=21.0.0
+
+# Database
+psycopg2-binary>=2.9.9
+
+# Security & production
+whitenoise>=6.6.0
+django-cors-headers>=4.3.0
+
+# Static/media (optional, for collectstatic)
+Pillow>=10.0.0
+
+# Health checks / monitoring (optional)
+django-health-check>=3.17.0
