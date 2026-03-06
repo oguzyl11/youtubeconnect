@@ -1,0 +1,16 @@
+# 504 Gateway Time-out önlemek için: transkript isteği 30–90 saniye sürebilir.
+# Bu bloğu mevcut Nginx server/location yapınıza ekleyin veya uyarlayın.
+
+location /api/transcript/ {
+    proxy_pass http://127.0.0.1:8000;   # veya upstream adınız
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+
+    # Transkript isteği uzun sürebilir (ScrapingBee/Playwright)
+    proxy_connect_timeout 180s;
+    proxy_send_timeout 180s;
+    proxy_read_timeout 180s;
+}

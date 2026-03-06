@@ -10,7 +10,7 @@ services:
       --threads 2
       --max-requests 1000
       --max-requests-jitter 50
-      --timeout 120
+      --timeout 180
       --access-logfile -
       --error-logfile -
       config.wsgi:application
