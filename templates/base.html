@@ -1,9 +1,10 @@
 <!DOCTYPE html>
-<html lang="tr">
+<html lang="{{ request.LANGUAGE_CODE|default:'tr' }}">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}YouTube Connect{% endblock %}</title>
+    {% block extra_head %}{% endblock %}
 </head>
 <body>
     {% block content %}{% endblock %}

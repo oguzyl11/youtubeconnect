@@ -14,6 +14,9 @@ env = environ.Env(
     DATABASE_URL=(str, ""),
     CORS_ALLOWED_ORIGINS=(list, []),
     CSRF_TRUSTED_ORIGINS=(list, []),
+    BASE_URL=(str, "http://localhost:8000"),
+    LANGUAGE_CODE=(str, "tr-tr"),
+    TIME_ZONE=(str, "Europe/Istanbul"),
 )
 _env_file = os.path.join(BASE_DIR, ".env")
 if os.path.exists(_env_file):
@@ -62,6 +65,7 @@ TEMPLATES = [
                 "django.template.context_processors.request",
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
+                "config.context_processors.base_url",
             ],
         },
     },
@@ -83,10 +87,13 @@ AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
 ]
 
-LANGUAGE_CODE = "tr-tr"
-TIME_ZONE = "Europe/Istanbul"
+LANGUAGE_CODE = env("LANGUAGE_CODE")
+TIME_ZONE = env("TIME_ZONE")
 USE_I18N = True
 USE_TZ = True
+
+# Tüm absolute URL'ler için (e-posta, redirect, API vb.)
+BASE_URL = env("BASE_URL").rstrip("/")
 
 STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
