@@ -120,11 +120,12 @@ def fetch_transcript_scrapingbee(video_id: str) -> Tuple[list, Optional[str]]:
 
     try:
         client = ScrapingBeeClient(api_key=api_key.strip())
+        # js_scenario: kütüphane dict veya string kabul eder, dict veriyoruz
         response = client.get(
             url,
             params={
                 "render_js": True,
-                "js_scenario": json.dumps(js_scenario),
+                "js_scenario": js_scenario,
                 "timeout": 60000,
             },
         )
