@@ -1,16 +1,33 @@
+# Sunucu (production) için: .env dosyasında BASE_URL, ALLOWED_HOSTS, SECRET_KEY, DATABASE_URL ayarlayın
 services:
   web:
     build: .
     container_name: remap_web
-    command: gunicorn --bind 0.0.0.0:8000 --workers 3 --threads 2 config.wsgi:application
+    command: >
+      gunicorn
+      --bind 0.0.0.0:8000
+      --workers ${GUNICORN_WORKERS:-3}
+      --threads 2
+      --max-requests 1000
+      --max-requests-jitter 50
+      --timeout 120
+      --access-logfile -
+      --error-logfile -
+      config.wsgi:application
     env_file: .env
     environment:
       - DJANGO_SETTINGS_MODULE=config.settings.production
     volumes:
       - static_volume:/app/staticfiles
     ports:
-      - "8001:8000"
-    restart: always
+      - "${PORT:-8000}:8000"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
 
 volumes:
   static_volume:

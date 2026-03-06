@@ -18,5 +18,8 @@ Pillow>=10.0.0
 # Health checks / monitoring (optional)
 django-health-check>=3.17.0
 
-# YouTube transcript (captions from public endpoint, no API key)
+# YouTube transcript: ScrapingBee (öncelikli) -> browser -> API
+scrapingbee>=1.0.0
+beautifulsoup4>=4.12.0
+playwright>=1.40.0
 youtube-transcript-api>=0.6.0

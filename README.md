@@ -32,6 +32,13 @@ Health: http://localhost:8000/health/
 
 İlk admin kullanıcısı: `docker compose exec web python manage.py createsuperuser`
 
+## Sunucuya deploy
+
+1. `.env` içinde **mutlaka**: `SECRET_KEY`, `ALLOWED_HOSTS`, `BASE_URL` (örn. `https://alanadiniz.com`), isteğe bağlı `DATABASE_URL`.
+2. İsteğe bağlı: `PORT=8000`, `GUNICORN_WORKERS=3`.
+3. Nginx/Caddy kullanıyorsanız HTTPS’i proxy’de sonlandırın ve `X-Forwarded-Proto: https` iletin.
+4. `docker compose up -d --build`
+
 ## Proje yapısı
 
 - `config/` – Django proje ayarları (settings/base, development, production)
@@ -46,7 +53,9 @@ Health: http://localhost:8000/health/
 | Değişken | Açıklama |
 |----------|----------|
 | SECRET_KEY | Django secret key (production’da mutlaka değiştirin) |
-| DEBUG | True/False |
 | ALLOWED_HOSTS | Virgülle ayrılmış host listesi |
-| POSTGRES_DB, POSTGRES_USER, POSTGRES_PASSWORD | Docker Compose PostgreSQL |
-| CORS_ALLOWED_ORIGINS, CSRF_TRUSTED_ORIGINS | CORS/CSRF için origin listesi |
+| BASE_URL | Site URL (sunucuda https://...) |
+| DATABASE_URL | PostgreSQL (yoksa SQLite) |
+| PORT | Dış port (varsayılan 8000) |
+| GUNICORN_WORKERS | Worker sayısı (varsayılan 3) |
+| CORS_ALLOWED_ORIGINS, CSRF_TRUSTED_ORIGINS | CORS/CSRF |

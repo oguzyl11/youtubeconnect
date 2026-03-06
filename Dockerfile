@@ -6,7 +6,7 @@ ENV PYTHONUNBUFFERED=1
 
 WORKDIR /app
 
-# Sistem bağımlılıkları (PostgreSQL client)
+# Sistem bağımlılıkları (PostgreSQL + Playwright Chromium)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq-dev gcc \
     && rm -rf /var/lib/apt/lists/*
@@ -15,11 +15,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Playwright Chromium (browser scraper için)
+ENV PLAYWRIGHT_BROWSERS_PATH=/app/.playwright-browsers
+RUN playwright install-deps chromium && playwright install chromium
+
 # Uygulama kodu
 COPY . .
 RUN mkdir -p staticfiles && chmod +x /app/entrypoint.sh
 
-# Non-root kullanıcı
+# Non-root kullanıcı (playwright browsers root'ta, okunabilir)
 RUN adduser --disabled-password --gecos "" appuser && chown -R appuser:appuser /app
 USER appuser
 
