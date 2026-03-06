@@ -3,6 +3,7 @@ Django base settings.
 """
 import os
 from pathlib import Path
+from urllib.parse import urlparse
 
 import environ
 
@@ -72,8 +73,21 @@ TEMPLATES = [
 ]
 
 DATABASES = {}
-if env("DATABASE_URL"):
+_db_url = (env("DATABASE_URL") or "").strip()
+if _db_url and not _db_url.startswith("sqlite"):
     DATABASES["default"] = env.db("DATABASE_URL")
+elif _db_url and _db_url.startswith("sqlite"):
+    # sqlite:///path/to/db.sqlite3 - env.db() host uyarısı vermesin diye elle ayarla
+    parsed = urlparse(_db_url)
+    path = (parsed.path or "").lstrip("/")
+    if path and os.path.isabs(path):
+        name = path
+    else:
+        name = str(BASE_DIR / (path or "db.sqlite3"))
+    DATABASES["default"] = {
+        "ENGINE": "django.db.backends.sqlite3",
+        "NAME": name,
+    }
 else:
     DATABASES["default"] = {
         "ENGINE": "django.db.backends.sqlite3",

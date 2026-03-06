@@ -37,7 +37,7 @@ Health: http://localhost:8000/health/
 1. `.env` içinde **mutlaka**: `SECRET_KEY`, `ALLOWED_HOSTS`, `BASE_URL` (örn. `https://alanadiniz.com`), isteğe bağlı `DATABASE_URL`.
 2. İsteğe bağlı: `PORT=8000`, `GUNICORN_WORKERS=3`.
 3. Nginx/Caddy kullanıyorsanız HTTPS’i proxy’de sonlandırın ve `X-Forwarded-Proto: https` iletin.
-4. **504 Gateway Time-out** alıyorsanız: transkript 30–90 sn sürebilir. Nginx'te `/api/transcript/` için `proxy_read_timeout` vb. en az **180 saniye** yapın (örnek: `nginx-transcript.conf.example`).
+4. **504 / upstream timed out:** Transkript 30–90 sn sürebilir. Nginx'te `/api/transcript/` için `proxy_read_timeout` (ve `proxy_connect_timeout` / `proxy_send_timeout`) en az **180 saniye** yapın (örnek: `nginx-transcript.conf.example`). **connect() failed (111):** `proxy_pass` portu, uygulamanın dinlediği portla aynı olmalı (`.env` içinde `PORT=8001` ise Nginx'te `http://127.0.0.1:8001` kullanın).
 5. `docker compose up -d --build`
 
 ## Proje yapısı

@@ -1,8 +1,8 @@
-# 504 Gateway Time-out önlemek için: transkript isteği 30–90 saniye sürebilir.
-# Bu bloğu mevcut Nginx server/location yapınıza ekleyin veya uyarlayın.
+# upstream timed out (110) hatası için: transkript 30–90 sn sürebilir, mutlaka ekleyin.
+# proxy_pass portu, uygulamanın dinlediği portla aynı olmalı (örn. .env PORT=8001 ise 8001).
 
 location /api/transcript/ {
-    proxy_pass http://127.0.0.1:8000;   # veya upstream adınız
+    proxy_pass http://127.0.0.1:8001;   # PORT=8001 ise 8001, yoksa 8000
     proxy_http_version 1.1;
     proxy_set_header Host $host;
     proxy_set_header X-Real-IP $remote_addr;
