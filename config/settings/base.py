@@ -135,5 +135,5 @@ TRANSCRIPT_RATE_LIMIT_PER_MINUTE = 10
 SCRAPINGBEE_API_KEY = (os.environ.get("SCRAPINGBEE_API_KEY") or "").strip() or None
 # Premium proxy: zor siteler (YouTube) için önerilir; production'da True yapılabilir
 SCRAPINGBEE_PREMIUM_PROXY = env.bool("SCRAPINGBEE_PREMIUM_PROXY", default=False)
-# İstek timeout (ms); doküman default 140000
-SCRAPINGBEE_TIMEOUT = env.int("SCRAPINGBEE_TIMEOUT", default=60000)
+# İstek timeout (ms); doküman default 140000; js_scenario için yeterli süre
+SCRAPINGBEE_TIMEOUT = env.int("SCRAPINGBEE_TIMEOUT", default=90000)

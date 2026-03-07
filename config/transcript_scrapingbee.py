@@ -25,7 +25,7 @@ def _parse_ts_to_seconds(ts_text: str) -> float:
 def _scrapingbee_base_params() -> dict:
     """Tüm ScrapingBee isteklerinde kullanılacak ortak parametreler (settings'den)."""
     params = {
-        "timeout": getattr(settings, "SCRAPINGBEE_TIMEOUT", 60000),
+        "timeout": getattr(settings, "SCRAPINGBEE_TIMEOUT", 90000),
     }
     if getattr(settings, "SCRAPINGBEE_PREMIUM_PROXY", False):
         params["premium_proxy"] = True
@@ -266,5 +266,5 @@ def _scrapingbee_error_message(status_code: int) -> Optional[str]:
     if status_code == 429:
         return "ScrapingBee kota aşıldı. Biraz bekleyin veya planı yükseltin."
     if status_code >= 500:
-        return f"ScrapingBee sunucu hatası ({status_code}). Kısa süre sonra tekrar deneyin."
+        return f"ScrapingBee servisi geçici olarak yanıt vermiyor (hata kodu {status_code}). Lütfen birkaç dakika sonra tekrar deneyin."
     return None
