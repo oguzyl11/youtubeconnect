@@ -18,6 +18,9 @@ Pillow>=10.0.0
 # Health checks / monitoring (optional)
 django-health-check>=3.17.0
 
-# YouTube transcript: sadece ScrapingBee
+# YouTube transcript (Invidious, script istekleri)
+requests>=2.28.0
+
+# YouTube transcript: ScrapingBee
 scrapingbee>=1.0.0
 beautifulsoup4>=4.12.0
