@@ -43,7 +43,9 @@ def extract_youtube_video_id(url: str) -> Optional[str]:
 
 def get_transcript_for_video(video_id: str) -> tuple[list, Optional[str]]:
     """
-    Video ID için transkript döner. Sadece ScrapingBee kullanılır (cache + SCRAPINGBEE_API_KEY).
+    Video ID için transkript döner.
+    Yöntem: YouTube watch sayfasından ytInitialPlayerResponse çıkarılıp
+    timedtext API (baseUrl) ile altyazı indirilir. API anahtarı gerekmez.
     Returns: (segments, error_message)
     """
     prefix = getattr(settings, "TRANSCRIPT_CACHE_KEY_PREFIX", "yt_transcript:")
@@ -54,13 +56,9 @@ def get_transcript_for_video(video_id: str) -> tuple[list, Optional[str]]:
     if cached is not None:
         return cached, None
 
-    api_key = (getattr(settings, "SCRAPINGBEE_API_KEY", None) or "").strip()
-    if not api_key:
-        return [], "SCRAPINGBEE_API_KEY .env dosyasında ayarlanmalı (https://www.scrapingbee.com)."
-
     try:
-        from config.transcript_scrapingbee import fetch_transcript_scrapingbee
-        result, error = fetch_transcript_scrapingbee(video_id)
+        from config.transcript_timedtext import fetch_transcript_timedtext
+        result, error = fetch_transcript_timedtext(video_id)
     except Exception as e:
         return [], str(e)
 

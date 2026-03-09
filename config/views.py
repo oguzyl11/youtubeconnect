@@ -101,11 +101,8 @@ def api_transcript(request):
 
     segments, error = get_transcript_for_video(video_id)
     if error:
-        err_msg = (error or "Transkript alınamadı.").strip()
-        if "SCRAPINGBEE_API_KEY" not in err_msg and ("block" in err_msg.lower() or "ip" in err_msg.lower()):
-            err_msg = err_msg.rstrip(".") + ". .env dosyasında SCRAPINGBEE_API_KEY doğru ayarlandığından emin olun (https://www.scrapingbee.com)."
         return JsonResponse(
-            {"error": err_msg, "video_id": video_id},
+            {"error": (error or "Transkript alınamadı.").strip(), "video_id": video_id},
             status=422,
         )
 

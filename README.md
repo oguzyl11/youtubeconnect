@@ -47,12 +47,14 @@ Health: http://localhost:8000/health/
 4. **504 / upstream timed out:** Transkript 30–90 sn sürebilir. Nginx'te `/api/transcript/` için `proxy_read_timeout` (ve `proxy_connect_timeout` / `proxy_send_timeout`) en az **180 saniye** yapın (örnek: `nginx-transcript.conf.example`). **connect() failed (111):** `proxy_pass` portu, uygulamanın dinlediği portla aynı olmalı (`.env` içinde `PORT=8001` ise Nginx'te `http://127.0.0.1:8001` kullanın).
 5. `docker compose up -d --build`
 
-## Chrome eklentisi (DOM’dan transkript, engellenmez)
+## Chrome eklentisi (DOM’dan transkript)
 
-YouTube kendi arayüzünde transkripti gösteriyor (“…” → “Show transcript”). **chrome-extension/** klasöründeki eklenti bu metni DOM’dan okuyup siteye gönderir; sunucu tarafında ScrapingBee/API kullanılmadığı için engellenmez.
+YouTube kendi arayüzünde transkripti gösteriyor (“…” → “Show transcript”). **chrome-extension/** klasöründeki eklenti bu metni DOM’dan okuyup siteye gönderir.
 
 - Kurulum: Chrome’da `chrome://extensions/` → Geliştirici modu → “Paketlenmemiş öğe yükle” → `chrome-extension` klasörünü seçin.
 - Detay: `chrome-extension/README.md`
+
+**Transkript (varsayılan):** API anahtarı gerekmez. YouTube watch sayfası HTML'den çekilir, `ytInitialPlayerResponse` içinden altyazı adresi (`baseUrl`) alınır, `timedtext` API ile metin indirilir (anthiago.com / youtube-transcript-api tarzı).
 
 ## Proje yapısı
 
@@ -74,5 +76,5 @@ YouTube kendi arayüzünde transkripti gösteriyor (“…” → “Show transc
 | DATABASE_URL | PostgreSQL (yoksa SQLite) |
 | PORT | Dış port (varsayılan 8000) |
 | GUNICORN_WORKERS | Worker sayısı (varsayılan 3) |
-| SCRAPINGBEE_API_KEY | Transkript (sunucu tarafı) için; yoksa sadece Chrome eklentisi kullanılır |
+| SCRAPINGBEE_API_KEY | İsteğe bağlı; transkript varsayılan olarak sayfa + timedtext ile alınır |
 | CORS_ALLOWED_ORIGINS, CSRF_TRUSTED_ORIGINS | CORS/CSRF (canlıda domain ekleyin) |

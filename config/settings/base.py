@@ -131,9 +131,8 @@ TRANSCRIPT_CACHE_KEY_PREFIX = "yt_transcript:"
 # API rate limit: dakikada en fazla istek (IP başına)
 TRANSCRIPT_RATE_LIMIT_PER_MINUTE = 10
 
-# Transkript: sadece ScrapingBee (Docker: env_file: .env ile SCRAPINGBEE_API_KEY gelir)
+# Transkript: varsayılan yöntem timedtext (sayfa HTML + timedtext API, API anahtarı gerekmez)
+# ScrapingBee modülü hâlâ mevcut; isteğe bağlı fallback için kullanılabilir
 SCRAPINGBEE_API_KEY = (os.environ.get("SCRAPINGBEE_API_KEY") or "").strip() or None
-# Premium proxy: zor siteler (YouTube) için önerilir; production'da True yapılabilir
 SCRAPINGBEE_PREMIUM_PROXY = env.bool("SCRAPINGBEE_PREMIUM_PROXY", default=False)
-# İstek timeout (ms); doküman default 140000; js_scenario için yeterli süre
 SCRAPINGBEE_TIMEOUT = env.int("SCRAPINGBEE_TIMEOUT", default=90000)
