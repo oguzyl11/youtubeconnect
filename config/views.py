@@ -57,6 +57,7 @@ def api_transcript(request):
         )
 
     video_id = None
+    body = {}
     if request.method == "GET":
         video_id = request.GET.get("video_id")
         if not video_id and request.GET.get("url"):
@@ -77,6 +78,26 @@ def api_transcript(request):
             {"error": "Geçerli bir YouTube URL veya video_id gerekli."},
             status=400,
         )
+
+    # Tarayıcı eklentisi (Chrome extension) ile gönderilen transkript
+    transcript_from_browser = (body.get("transcript") or "").strip()
+    if transcript_from_browser and request.method == "POST":
+        prefix = getattr(settings, "TRANSCRIPT_CACHE_KEY_PREFIX", "yt_transcript:")
+        timeout = getattr(settings, "TRANSCRIPT_CACHE_TIMEOUT", 3600)
+        cache_key = f"{prefix}{video_id}"
+        # Parça parça (her satır veya segment) veya tek blok
+        lines = [t.strip() for t in transcript_from_browser.split("\n") if t.strip()]
+        if not lines:
+            segments = [{"text": transcript_from_browser}]
+        else:
+            segments = [{"text": line} for line in lines]
+        cache.set(cache_key, segments, timeout=timeout)
+        return JsonResponse({
+            "video_id": video_id,
+            "segments": segments,
+            "full_text": " ".join(s["text"] for s in segments),
+            "source": "browser_extension",
+        })
 
     segments, error = get_transcript_for_video(video_id)
     if error:

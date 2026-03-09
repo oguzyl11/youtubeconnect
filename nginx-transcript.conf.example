@@ -1,8 +1,8 @@
 # upstream timed out (110) hatası için: transkript 30–90 sn sürebilir, mutlaka ekleyin.
-# proxy_pass portu, uygulamanın dinlediği portla aynı olmalı (örn. .env PORT=8001 ise 8001).
+# proxy_pass portu, uygulamanın dinlediği portla AYNI olmalı (.env PORT=8000 → 8000, PORT=8001 → 8001).
 
 location /api/transcript/ {
-    proxy_pass http://127.0.0.1:8001;   # PORT=8001 ise 8001, yoksa 8000
+    proxy_pass http://127.0.0.1:8000;   # PORT ile aynı olmalı (8000 veya 8001)
     proxy_http_version 1.1;
     proxy_set_header Host $host;
     proxy_set_header X-Real-IP $remote_addr;
