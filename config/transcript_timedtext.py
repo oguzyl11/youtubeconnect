@@ -4,6 +4,7 @@ timedtext API (baseUrl) ile altyazı indirme. API anahtarı gerekmez.
 Fallback: Innertube player API (POST youtubei/v1/player).
 """
 import json
+import logging
 import re
 import xml.etree.ElementTree as ET
 from typing import Optional
@@ -21,11 +22,19 @@ INNERTUBE_PLAYER_BASE = "https://www.youtube.com/youtubei/v1/player"
 INNERTUBE_KEY_FALLBACK = "AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9Y21XuKTY"
 CLIENT_VERSION_FALLBACK = "2.20250101.00.00"
 TIMEOUT = 25
+YT_ORIGIN = "https://www.youtube.com"
+
+logger = logging.getLogger(__name__)
 
 
 def _http_get(url: str, extra_headers: Optional[dict] = None) -> tuple[str, Optional[str]]:
-    """URL'ye GET atar; (body, error) döner."""
-    headers = {"User-Agent": USER_AGENT, "Accept-Language": "en-US,en;q=0.9"}
+    """URL'ye GET atar; (body, error) döner. YouTube için Origin/Referer eklenir."""
+    headers = {
+        "User-Agent": USER_AGENT,
+        "Accept-Language": "en-US,en;q=0.9",
+        "Origin": YT_ORIGIN,
+        "Referer": YT_ORIGIN + "/",
+    }
     if extra_headers:
         headers.update(extra_headers)
     try:
@@ -46,6 +55,8 @@ def _http_post_json(url: str, data: dict) -> tuple[Optional[dict], Optional[str]
         "User-Agent": USER_AGENT,
         "Content-Type": "application/json",
         "Accept-Language": "en-US,en;q=0.9",
+        "Origin": YT_ORIGIN,
+        "Referer": YT_ORIGIN + "/",
     }
     try:
         body = json.dumps(data).encode("utf-8")
@@ -240,6 +251,9 @@ def fetch_transcript_timedtext(video_id: str) -> tuple[list, Optional[str]]:
         base_url = _extract_base_url_from_html(html)
         if base_url:
             tracks = [{"baseUrl": base_url, "kind": None}]
+    reasons = []
+    if not tracks:
+        reasons.append("watch: caption yok")
     if not tracks:
         embed_url = EMBED_URL_TEMPLATE.format(video_id=video_id)
         embed_html, _ = _http_get(embed_url)
@@ -250,16 +264,26 @@ def fetch_transcript_timedtext(video_id: str) -> tuple[list, Optional[str]]:
                 base_url = _extract_base_url_from_html(embed_html)
                 if base_url:
                     tracks = [{"baseUrl": base_url, "kind": None}]
+        if not tracks:
+            reasons.append("embed: caption yok")
     if not tracks:
-        innertube_tracks, _ = _fetch_caption_tracks_innertube(video_id, html)
+        innertube_tracks, innertube_err = _fetch_caption_tracks_innertube(video_id, html)
         if innertube_tracks:
             tracks = innertube_tracks
+        else:
+            reasons.append(f"innertube: {innertube_err or 'yok'}")
     if not tracks:
-        innertube_tracks, _ = _fetch_caption_tracks_innertube(video_id, "")
+        innertube_tracks, innertube_err2 = _fetch_caption_tracks_innertube(video_id, "")
         if innertube_tracks:
             tracks = innertube_tracks
+        elif not reasons or not reasons[-1].startswith("innertube:"):
+            reasons.append(f"innertube(2): {innertube_err2 or 'yok'}")
     if not tracks:
-        return [], "Bu video için altyazı bulunamadı."
+        msg = "Bu video için altyazı bulunamadı."
+        if reasons:
+            msg += " (" + ", ".join(reasons[:3]) + ")"
+        logger.warning("transcript failed video_id=%s reasons=%s", video_id, reasons)
+        return [], msg
 
     # Önce manuel altyazı, sonra ASR (otomatik) tercih et
     chosen = None
