@@ -86,14 +86,19 @@ def _extract_client_version(html: str) -> str:
     return m.group(1) if m else CLIENT_VERSION_FALLBACK
 
 
-def _fetch_caption_tracks_innertube(video_id: str, html: str = "") -> tuple[list[dict], Optional[str]]:
+def _fetch_caption_tracks_innertube(
+    video_id: str,
+    html: str = "",
+    client_name: str = "WEB",
+    client_version: Optional[str] = None,
+) -> tuple[list[dict], Optional[str]]:
     """Innertube player API ile captionTracks döner. (tracks, error)"""
     key = _extract_innertube_key(html) if html else INNERTUBE_KEY_FALLBACK
-    version = _extract_client_version(html) if html else CLIENT_VERSION_FALLBACK
+    version = client_version or (_extract_client_version(html) if html else CLIENT_VERSION_FALLBACK)
     url = f"{INNERTUBE_PLAYER_BASE}?key={key}"
     payload = {
         "context": {
-            "client": {"clientName": "WEB", "clientVersion": version},
+            "client": {"clientName": client_name, "clientVersion": version},
         },
         "videoId": video_id,
     }
@@ -101,13 +106,19 @@ def _fetch_caption_tracks_innertube(video_id: str, html: str = "") -> tuple[list
     if err:
         return [], err
     if not data:
-        return [], "Innertube yanıt boş"
+        return [], "yanıt boş"
     try:
+        playability = (data.get("playabilityStatus") or {}).get("status")
+        if playability and playability != "OK":
+            reason = (data.get("playabilityStatus") or {}).get("reason") or playability
+            return [], str(reason)[:80]
         captions = (data.get("captions") or {}).get("playerCaptionsTracklistRenderer") or {}
         tracks = captions.get("captionTracks") or []
-        return tracks, None
+        if tracks:
+            return tracks, None
+        return [], "caption yok"
     except Exception:
-        return [], "captionTracks parse edilemedi"
+        return [], "parse hatası"
 
 
 def _extract_json_from_assign(html: str, var_name: str) -> Optional[dict]:
@@ -276,12 +287,20 @@ def fetch_transcript_timedtext(video_id: str) -> tuple[list, Optional[str]]:
         innertube_tracks, innertube_err2 = _fetch_caption_tracks_innertube(video_id, "")
         if innertube_tracks:
             tracks = innertube_tracks
-        elif not reasons or not reasons[-1].startswith("innertube:"):
-            reasons.append(f"innertube(2): {innertube_err2 or 'yok'}")
+        else:
+            reasons.append(f"innertube: {innertube_err2 or 'yok'}")
+    if not tracks:
+        innertube_tracks, innertube_err3 = _fetch_caption_tracks_innertube(
+            video_id, "", client_name="ANDROID", client_version="19.01.00"
+        )
+        if innertube_tracks:
+            tracks = innertube_tracks
+        else:
+            reasons.append(f"android: {innertube_err3 or 'yok'}")
     if not tracks:
         msg = "Bu video için altyazı bulunamadı."
         if reasons:
-            msg += " (" + ", ".join(reasons[:3]) + ")"
+            msg += " (" + ", ".join(reasons[:5]) + ")"
         logger.warning("transcript failed video_id=%s reasons=%s", video_id, reasons)
         return [], msg
 
