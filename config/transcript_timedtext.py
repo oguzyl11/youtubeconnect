@@ -1,7 +1,7 @@
 """
 YouTube transkript: sayfa HTML'inden ytInitialPlayerResponse çıkarıp
 timedtext API (baseUrl) ile altyazı indirme. API anahtarı gerekmez.
-(youtube-transcript-api / anthiago.com tarzı yöntem)
+Fallback: Innertube player API (POST youtubei/v1/player).
 """
 import json
 import re
@@ -16,6 +16,9 @@ USER_AGENT = (
     "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 )
 WATCH_URL_TEMPLATE = "https://www.youtube.com/watch?v={video_id}"
+INNERTUBE_PLAYER_BASE = "https://www.youtube.com/youtubei/v1/player"
+# Yedek key (sayfada bulunamazsa)
+INNERTUBE_KEY_FALLBACK = "AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9Y21XuKTY"
 TIMEOUT = 25
 
 
@@ -34,6 +37,58 @@ def _http_get(url: str, extra_headers: Optional[dict] = None) -> tuple[str, Opti
         return "", str(e.reason) if getattr(e, "reason", None) else str(e)
     except Exception as e:
         return "", str(e)
+
+
+def _http_post_json(url: str, data: dict) -> tuple[Optional[dict], Optional[str]]:
+    """POST with JSON body; returns (parsed_json, error)."""
+    headers = {
+        "User-Agent": USER_AGENT,
+        "Content-Type": "application/json",
+        "Accept-Language": "en-US,en;q=0.9",
+    }
+    try:
+        body = json.dumps(data).encode("utf-8")
+        req = Request(url, data=body, headers=headers, method="POST")
+        with urlopen(req, timeout=TIMEOUT) as resp:
+            out = json.loads(resp.read().decode("utf-8", errors="replace"))
+            return out, None
+    except HTTPError as e:
+        return None, f"HTTP {e.code}"
+    except URLError as e:
+        return None, str(e.reason) if getattr(e, "reason", None) else str(e)
+    except json.JSONDecodeError as e:
+        return None, f"JSON: {e}"
+    except Exception as e:
+        return None, str(e)
+
+
+def _extract_innertube_key(html: str) -> str:
+    """HTML'den INNERTUBE_API_KEY çıkarır."""
+    m = re.search(r'"INNERTUBE_API_KEY"\s*:\s*"([^"]+)"', html)
+    return m.group(1) if m else INNERTUBE_KEY_FALLBACK
+
+
+def _fetch_caption_tracks_innertube(video_id: str, html: str = "") -> tuple[list[dict], Optional[str]]:
+    """Innertube player API ile captionTracks döner. (tracks, error)"""
+    key = _extract_innertube_key(html) if html else INNERTUBE_KEY_FALLBACK
+    url = f"{INNERTUBE_PLAYER_BASE}?key={key}"
+    payload = {
+        "context": {
+            "client": {"clientName": "WEB", "clientVersion": "2.20240101.00.00"},
+        },
+        "videoId": video_id,
+    }
+    data, err = _http_post_json(url, payload)
+    if err:
+        return [], err
+    if not data:
+        return [], "Innertube yanıt boş"
+    try:
+        captions = (data.get("captions") or {}).get("playerCaptionsTracklistRenderer") or {}
+        tracks = captions.get("captionTracks") or []
+        return tracks, None
+    except Exception:
+        return [], "captionTracks parse edilemedi"
 
 
 def _extract_json_from_assign(html: str, var_name: str) -> Optional[dict]:
@@ -179,6 +234,10 @@ def fetch_transcript_timedtext(video_id: str) -> tuple[list, Optional[str]]:
         base_url = _extract_base_url_from_html(html)
         if base_url:
             tracks = [{"baseUrl": base_url, "kind": None}]
+    if not tracks:
+        innertube_tracks, _ = _fetch_caption_tracks_innertube(video_id, html)
+        if innertube_tracks:
+            tracks = innertube_tracks
     if not tracks:
         return [], "Bu video için altyazı bulunamadı."
 
