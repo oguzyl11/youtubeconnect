@@ -1,4 +1,7 @@
 .env
+cookies.txt
+success.log
+error.log
 .venv
 venv
 __pycache__

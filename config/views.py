@@ -1,16 +1,22 @@
 """
 Ana sayfa ve transkript API view'ları.
 """
+import json
 import time
 
 from django.conf import settings
 from django.core.cache import cache
 from django.http import JsonResponse
 from django.shortcuts import render
-from django.views.decorators.http import require_GET, require_http_methods
+from django.views.decorators.http import require_GET, require_http_methods, require_POST
 from django.views.decorators.csrf import ensure_csrf_cookie
 
 from config.youtube_utils import extract_youtube_video_id, get_transcript_for_video
+from config.services import (
+    TranscriptServiceError,
+    fetch_transcript_from_microservice,
+)
+from config.models import YouTubeTranscript
 
 
 def _get_client_ip(request):
@@ -110,4 +116,70 @@ def api_transcript(request):
         "video_id": video_id,
         "segments": segments,
         "full_text": " ".join(s["text"] for s in segments),
+    })
+
+
+@require_POST
+def process_youtube_video(request):
+    """
+    POST ile youtube_url alır; FastAPI mikroservisinden transkript çeker,
+    veritabanında YouTubeTranscript oluşturur veya günceller.
+    JSON: {"youtube_url": "https://..."} veya form: youtube_url=...
+    """
+    youtube_url = None
+    content_type = request.content_type or ""
+    if "application/json" in content_type and request.body:
+        try:
+            body = json.loads(request.body)
+            youtube_url = (body.get("youtube_url") or body.get("url") or "").strip()
+        except (json.JSONDecodeError, TypeError):
+            pass
+    if not youtube_url:
+        youtube_url = (request.POST.get("youtube_url") or request.POST.get("url") or "").strip()
+
+    if not youtube_url:
+        return JsonResponse(
+            {"error": "youtube_url veya url parametresi gerekli."},
+            status=400,
+        )
+
+    try:
+        data = fetch_transcript_from_microservice(youtube_url)
+    except TranscriptServiceError as e:
+        return JsonResponse(
+            {"error": str(e)},
+            status=422,
+        )
+    except Exception as e:
+        return JsonResponse(
+            {"error": f"Beklenmeyen hata: {e}"},
+            status=500,
+        )
+
+    video_id = data.get("video_id") or ""
+    title = data.get("title")
+    raw_text = data.get("raw_text")
+    clean_text = data.get("clean_text")
+
+    try:
+        obj, created = YouTubeTranscript.objects.update_or_create(
+            video_id=video_id,
+            defaults={
+                "video_url": youtube_url,
+                "title": title,
+                "raw_text": raw_text,
+                "clean_text": clean_text,
+            },
+        )
+    except Exception as e:
+        return JsonResponse(
+            {"error": f"Veritabanı kaydı oluşturulamadı: {e}"},
+            status=500,
+        )
+
+    return JsonResponse({
+        "status": "ok",
+        "message": "Kaydedildi." if created else "Güncellendi.",
+        "video_id": obj.video_id,
+        "clean_text": obj.clean_text or clean_text or "",
     })

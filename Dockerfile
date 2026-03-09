@@ -1,29 +1,22 @@
-# Production-ready Django with Gunicorn
-FROM python:3.12-slim
+# FastAPI Transcript API – hafif Python imajı
+FROM python:3.11-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
 WORKDIR /app
 
-# Sistem bağımlılıkları (PostgreSQL)
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    libpq-dev gcc \
+# yt-dlp için ffmpeg
+RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
-# Python bağımlılıkları
+# Bağımlılıklar
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Uygulama kodu
+# Uygulama (.dockerignore gereksizları hariç tutar; cookies.txt dahil)
 COPY . .
-RUN mkdir -p staticfiles && chmod +x /app/entrypoint.sh
-
-# Non-root kullanıcı
-RUN adduser --disabled-password --gecos "" appuser && chown -R appuser:appuser /app
-USER appuser
 
 EXPOSE 8000
 
-ENTRYPOINT ["/app/entrypoint.sh"]
-CMD ["gunicorn", "--bind", "0.0.0.0:8000", "--workers", "3", "--threads", "2", "config.wsgi:application"]
+CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000"]
