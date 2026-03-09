@@ -16,9 +16,10 @@ USER_AGENT = (
     "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 )
 WATCH_URL_TEMPLATE = "https://www.youtube.com/watch?v={video_id}"
+EMBED_URL_TEMPLATE = "https://www.youtube.com/embed/{video_id}"
 INNERTUBE_PLAYER_BASE = "https://www.youtube.com/youtubei/v1/player"
-# Yedek key (sayfada bulunamazsa)
 INNERTUBE_KEY_FALLBACK = "AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9Y21XuKTY"
+CLIENT_VERSION_FALLBACK = "2.20250101.00.00"
 TIMEOUT = 25
 
 
@@ -68,13 +69,20 @@ def _extract_innertube_key(html: str) -> str:
     return m.group(1) if m else INNERTUBE_KEY_FALLBACK
 
 
+def _extract_client_version(html: str) -> str:
+    """HTML'den WEB clientVersion çıkarır (varsa)."""
+    m = re.search(r'"clientVersion"\s*:\s*"([^"]+)"', html)
+    return m.group(1) if m else CLIENT_VERSION_FALLBACK
+
+
 def _fetch_caption_tracks_innertube(video_id: str, html: str = "") -> tuple[list[dict], Optional[str]]:
     """Innertube player API ile captionTracks döner. (tracks, error)"""
     key = _extract_innertube_key(html) if html else INNERTUBE_KEY_FALLBACK
+    version = _extract_client_version(html) if html else CLIENT_VERSION_FALLBACK
     url = f"{INNERTUBE_PLAYER_BASE}?key={key}"
     payload = {
         "context": {
-            "client": {"clientName": "WEB", "clientVersion": "2.20240101.00.00"},
+            "client": {"clientName": "WEB", "clientVersion": version},
         },
         "videoId": video_id,
     }
@@ -224,10 +232,8 @@ def fetch_transcript_timedtext(video_id: str) -> tuple[list, Optional[str]]:
     html, err = _http_get(url)
     if err:
         return [], f"Video sayfası alınamadı: {err}"
-    if "ytInitialPlayerResponse" not in html:
-        return [], "Sayfada altyazı bilgisi bulunamadı (video kısıtlı veya altyazı yok)."
 
-    player = _extract_json_from_assign(html, "ytInitialPlayerResponse")
+    player = _extract_json_from_assign(html, "ytInitialPlayerResponse") if "ytInitialPlayerResponse" in html else None
     tracks = _get_caption_tracks(player) if player else []
 
     if not tracks:
@@ -235,7 +241,21 @@ def fetch_transcript_timedtext(video_id: str) -> tuple[list, Optional[str]]:
         if base_url:
             tracks = [{"baseUrl": base_url, "kind": None}]
     if not tracks:
+        embed_url = EMBED_URL_TEMPLATE.format(video_id=video_id)
+        embed_html, _ = _http_get(embed_url)
+        if embed_html:
+            embed_player = _extract_json_from_assign(embed_html, "ytInitialPlayerResponse") or _extract_json_from_assign(embed_html, "ytInitialData")
+            tracks = _get_caption_tracks(embed_player) if embed_player else []
+            if not tracks:
+                base_url = _extract_base_url_from_html(embed_html)
+                if base_url:
+                    tracks = [{"baseUrl": base_url, "kind": None}]
+    if not tracks:
         innertube_tracks, _ = _fetch_caption_tracks_innertube(video_id, html)
+        if innertube_tracks:
+            tracks = innertube_tracks
+    if not tracks:
+        innertube_tracks, _ = _fetch_caption_tracks_innertube(video_id, "")
         if innertube_tracks:
             tracks = innertube_tracks
     if not tracks:
