@@ -1,11 +1,7 @@
 #!/usr/bin/env python3
 """
-YouTube videolarından transkript çekmek için bağımsız script.
-- youtube-transcript-api kullanır (birincil)
-- Fallback: youtube-transcript-api başarısız olursa yt-dlp ile dener
-- cookies.txt (Netscape format) ile bot engelini aşmayı dener
-- Her istekte farklı User-Agent gönderir
-- Detaylı hata yönetimi
+YouTube transkript: youtube-transcript-api (birincil) + yt-dlp fallback.
+Cookie, User-Agent ve opsiyonel proxy destekli.
 """
 import argparse
 import json
@@ -15,41 +11,28 @@ import sys
 from pathlib import Path
 from typing import List, Optional, Tuple
 
-# Proje kökünü path'e ekle
 ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-# User-Agent havuzu – her istekte rastgele seçilir
 USER_AGENTS = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0",
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Safari/605.1.15",
-    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36 Edg/119.0.0.0",
-    "Mozilla/5.0 (iPhone; CPU iPhone OS 17_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Mobile/15E148 Safari/604.1",
-    "Mozilla/5.0 (iPad; CPU OS 17_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Mobile/15E148 Safari/604.1",
 ]
 
 
 def _extract_video_id(value: str) -> Optional[str]:
-    """URL veya ham video ID'den ID çıkarır."""
     if not value or not value.strip():
         return None
     value = value.strip()
-    # Zaten 11 karakterlik ID mi?
     if re.match(r"^[a-zA-Z0-9_-]{11}$", value):
         return value
-    # youtu.be/ID
     m = re.search(r"youtu\.be/([a-zA-Z0-9_-]{11})", value)
     if m:
         return m.group(1)
-    # youtube.com/watch?v=ID
     m = re.search(r"[?&]v=([a-zA-Z0-9_-]{11})", value)
     if m:
         return m.group(1)
-    # youtube.com/embed/ID
     m = re.search(r"youtube\.com/embed/([a-zA-Z0-9_-]{11})", value)
     if m:
         return m.group(1)
@@ -57,15 +40,11 @@ def _extract_video_id(value: str) -> Optional[str]:
 
 
 def _load_cookies_from_file(path: str) -> Optional["http.cookiejar.MozillaCookieJar"]:
-    """Netscape formatındaki cookies.txt dosyasını yükler."""
     try:
         from http.cookiejar import MozillaCookieJar
-
         jar = MozillaCookieJar()
         jar.load(str(path), ignore_discard=True, ignore_expires=True)
         return jar
-    except FileNotFoundError:
-        return None
     except Exception:
         return None
 
@@ -73,23 +52,22 @@ def _load_cookies_from_file(path: str) -> Optional["http.cookiejar.MozillaCookie
 def _create_http_client(
     cookies_path: Optional[str] = None,
     use_random_ua: bool = True,
+    proxy: Optional[str] = None,
 ) -> "requests.Session":
-    """Cookies ve rastgele User-Agent ile Session oluşturur."""
     import requests
     from requests.adapters import HTTPAdapter
     from urllib3.util.retry import Retry
 
     session = requests.Session()
-
     headers = {
         "Accept-Language": "en-US,en;q=0.9",
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     }
-    if use_random_ua:
-        headers["User-Agent"] = random.choice(USER_AGENTS)
-    else:
-        headers["User-Agent"] = USER_AGENTS[0]
+    headers["User-Agent"] = random.choice(USER_AGENTS) if use_random_ua else USER_AGENTS[0]
     session.headers.update(headers)
+
+    if proxy:
+        session.proxies = {"http": proxy, "https": proxy}
 
     if cookies_path:
         jar = _load_cookies_from_file(cookies_path)
@@ -100,12 +78,10 @@ def _create_http_client(
     adapter = HTTPAdapter(max_retries=retry)
     session.mount("https://", adapter)
     session.mount("http://", adapter)
-
     return session
 
 
 def _parse_subtitle_json3(raw: str) -> List[dict]:
-    """YouTube json3 formatını [{"text", "start", "duration"}, ...] listesine çevirir."""
     out = []
     try:
         data = json.loads(raw)
@@ -130,26 +106,20 @@ def _parse_subtitle_json3(raw: str) -> List[dict]:
 
 
 def _parse_subtitle_vtt(raw: str) -> List[dict]:
-    """WebVTT formatını [{"text", "start", "duration"}, ...] listesine çevirir."""
     out = []
-
-    def ts_to_sec(h, m, s, ms):
-        return int(h) * 3600 + int(m) * 60 + int(s) + int(ms) / 1000.0
-
-    # HH:MM:SS.mmm --> HH:MM:SS.mmm veya MM:SS.mmm --> MM:SS.mmm
     ts_re = re.compile(
         r"(\d{1,2}):(\d{2}):(\d{2})\.(\d{3})\s*-->\s*(\d{1,2}):(\d{2}):(\d{2})\.(\d{3})"
     )
-    # MM:SS.mmm --> MM:SS.mmm (saat yok)
-    ts_re_short = re.compile(
-        r"(\d{1,2}):(\d{2})\.(\d{3})\s*-->\s*(\d{1,2}):(\d{2})\.(\d{3})"
-    )
+    ts_re_short = re.compile(r"(\d{1,2}):(\d{2})\.(\d{3})\s*-->\s*(\d{1,2}):(\d{2})\.(\d{3})")
+
+    def ts_to_sec(h, m, s, ms):
+        return int(h) * 3600 + int(m) * 60 + int(s) + int(ms) / 1000.0
 
     for block in raw.split("\n\n"):
         lines = block.strip().split("\n")
         if len(lines) < 2:
             continue
-        m = ts_re.match(lines[0]) or None
+        m = ts_re.match(lines[0])
         if m:
             h1, m1, s1, ms1 = m.group(1), m.group(2), m.group(3), m.group(4)
             h2, m2, s2, ms2 = m.group(5), m.group(6), m.group(7), m.group(8)
@@ -164,18 +134,11 @@ def _parse_subtitle_vtt(raw: str) -> List[dict]:
             continue
         start = ts_to_sec(h1, m1, s1, ms1)
         end = ts_to_sec(h2, m2, s2, ms2)
-        duration = max(0.1, end - start)
-        out.append({"text": text, "start": start, "duration": duration})
+        out.append({"text": text, "start": start, "duration": max(0.1, end - start)})
     return out
 
 
-def _fetch_transcript_ytdlp(video_id: str, languages: tuple) -> Tuple[List[dict], Optional[str]]:
-    """
-    yt-dlp ile transkript çeker (fallback).
-    writesubtitles + writeautomaticsub, sadece altyazı URL'si alınır, videoyu indirmez.
-    Altyazı içeriği HTTP ile çekilip bellekte parse edilir.
-    Returns: (segments, error_message)
-    """
+def _fetch_transcript_ytdlp(video_id: str, languages: tuple, proxy: Optional[str] = None) -> Tuple[List[dict], Optional[str]]:
     try:
         import yt_dlp
     except ImportError:
@@ -190,6 +153,8 @@ def _fetch_transcript_ytdlp(video_id: str, languages: tuple) -> Tuple[List[dict]
         "writeautomaticsub": True,
         "subtitleslangs": list(languages) or ["tr", "en"],
     }
+    if proxy:
+        ydl_opts["proxy"] = proxy
 
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -200,7 +165,6 @@ def _fetch_transcript_ytdlp(video_id: str, languages: tuple) -> Tuple[List[dict]
     if not info:
         return [], "yt-dlp video bilgisi alınamadı."
 
-    # subtitles (manuel) + automatic_captions (otomatik) birleştir
     subs = info.get("subtitles") or {}
     auto = info.get("automatic_captions") or {}
     all_subs = dict(subs)
@@ -208,7 +172,6 @@ def _fetch_transcript_ytdlp(video_id: str, languages: tuple) -> Tuple[List[dict]
         if lang not in all_subs:
             all_subs[lang] = entries
 
-    # Öncelik sırasına göre dil seç
     sub_entries = None
     for lang in languages:
         if lang in all_subs:
@@ -216,40 +179,33 @@ def _fetch_transcript_ytdlp(video_id: str, languages: tuple) -> Tuple[List[dict]
             break
     if not sub_entries:
         sub_entries = list(all_subs.values())[0] if all_subs else None
-
     if not sub_entries:
         return [], "yt-dlp: Bu video için altyazı bulunamadı."
 
-    # json3 > vtt > srv3 tercih et
     entry = None
-    for ext in ("json3", "vtt", "srv3"):
-        for e in sub_entries:
-            if e.get("ext") == ext and e.get("url"):
-                entry = e
-                break
-        if entry:
+    for e in sub_entries:
+        if e.get("url"):
+            entry = e
             break
     if not entry:
-        entry = sub_entries[0]
-    sub_url = entry.get("url")
-    if not sub_url:
         return [], "yt-dlp: Altyazı URL'si alınamadı."
+    sub_url = entry.get("url")
 
-    # Altyazı içeriğini HTTP ile belleğe çek
     try:
         import requests
-        resp = requests.get(sub_url, headers={"User-Agent": random.choice(USER_AGENTS)}, timeout=30)
+        kw = {"timeout": 30, "headers": {"User-Agent": random.choice(USER_AGENTS)}}
+        if proxy:
+            kw["proxies"] = {"http": proxy, "https": proxy}
+        resp = requests.get(sub_url, **kw)
         resp.raise_for_status()
         raw = resp.text
     except Exception as e:
         return [], f"yt-dlp: Altyazı indirilemedi: {e}"
 
-    # Parse
     if raw.strip().startswith("{"):
         segments = _parse_subtitle_json3(raw)
     else:
         segments = _parse_subtitle_vtt(raw)
-
     if not segments:
         return [], "yt-dlp: Altyazı parse edilemedi."
     return segments, None
@@ -259,8 +215,8 @@ def _fetch_transcript_youtube_api(
     video_id: str,
     cookies_path: Optional[str],
     languages: tuple,
+    proxy: Optional[str] = None,
 ) -> Tuple[List[dict], Optional[str]]:
-    """youtube-transcript-api ile transkript çeker. Returns: (segments, error_message)"""
     try:
         from youtube_transcript_api import YouTubeTranscriptApi
         from youtube_transcript_api._errors import (
@@ -277,7 +233,7 @@ def _fetch_transcript_youtube_api(
     except ImportError as e:
         return [], f"youtube-transcript-api yüklü değil: pip install youtube-transcript-api\nDetay: {e}"
 
-    http_client = _create_http_client(cookies_path=cookies_path, use_random_ua=True)
+    http_client = _create_http_client(cookies_path=cookies_path, use_random_ua=True, proxy=proxy)
 
     try:
         api = YouTubeTranscriptApi(http_client=http_client)
@@ -295,52 +251,48 @@ def _fetch_transcript_youtube_api(
             ]
         return segments, None
     except TranscriptsDisabled:
-        return [], (
-            "Bu videonun transkriptleri kapalı. "
-            "Video sahibi altyazı/transkript özelliğini devre dışı bırakmış."
-        )
+        return [], "Bu videonun transkriptleri kapalı."
     except NoTranscriptFound:
-        return [], (
-            "Bu video için uygun dilde transkript bulunamadı. "
-            f"İstenen diller: {', '.join(languages)}"
-        )
+        return [], f"Bu video için uygun dilde transkript bulunamadı. İstenen diller: {', '.join(languages)}"
     except VideoUnavailable:
         return [], "Video mevcut değil veya silinmiş."
     except VideoUnplayable:
-        return [], "Video oynatılamıyor (yaş kısıtlaması veya bölgesel kısıtlama olabilir)."
+        return [], "Video oynatılamıyor."
     except IpBlocked:
-        return [], (
-            "IP adresiniz YouTube tarafından geçici olarak engellenmiş (bot koruması). "
-            "Çözüm: cookies.txt kullanın, VPN/proxy deneyin veya bir süre bekleyin."
-        )
+        return [], "IP engeli. Proxy veya cookies.txt deneyin."
     except RequestBlocked:
-        return [], (
-            "İstek bot koruması nedeniyle engellendi. "
-            "Çözüm: Geçerli bir cookies.txt (Netscape format) kullanın veya VPN/proxy deneyin."
-        )
+        return [], "İstek engellendi. Proxy veya cookies.txt deneyin."
     except CookieInvalid:
-        return [], (
-            "cookies.txt geçersiz veya süresi dolmuş. "
-            "Tarayıcıdan yeni cookies export edin (Cookie-Editor eklentisi, Netscape format)."
-        )
+        return [], "cookies.txt geçersiz veya süresi dolmuş."
     except CookiePathInvalid:
-        return [], (
-            "cookies.txt dosyası bulunamadı veya okunamıyor. "
-            f"Kontrol edin: {cookies_path}"
-        )
+        return [], f"cookies.txt bulunamadı: {cookies_path}"
     except CouldNotRetrieveTranscript:
-        return [], (
-            "Transkript alınamadı. Video transkript desteklemiyor olabilir "
-            "veya YouTube geçici bir hata veriyor. Daha sonra tekrar deneyin."
-        )
+        return [], "Transkript alınamadı."
     except Exception as e:
-        err_msg = str(e).lower()
-        if "ip" in err_msg or "blocked" in err_msg or "429" in err_msg:
-            return [], (
-                "Bot engeli veya IP kısıtlaması tespit edildi. "
-                "cookies.txt kullanın veya VPN/proxy deneyin."
-            )
         return [], f"Beklenmeyen hata: {e}"
+
+
+def _try_with_proxy(
+    video_id: str,
+    cookies_path: Optional[str],
+    languages: tuple,
+    use_ytdlp_fallback: bool,
+    proxy: Optional[str],
+) -> Tuple[List[dict], Optional[str]]:
+    """Tek proxy (veya None) ile youtube_transcript_api + yt-dlp fallback dener."""
+    segments, error = _fetch_transcript_youtube_api(
+        video_id, cookies_path, languages, proxy=proxy
+    )
+    if segments:
+        return segments, None
+    if use_ytdlp_fallback:
+        ytdlp_segments, ytdlp_error = _fetch_transcript_ytdlp(
+            video_id, languages, proxy=proxy
+        )
+        if ytdlp_segments:
+            return ytdlp_segments, None
+        error = error or ytdlp_error
+    return [], error
 
 
 def fetch_transcript(
@@ -348,74 +300,53 @@ def fetch_transcript(
     cookies_path: Optional[str] = None,
     languages: tuple = ("tr", "en"),
     use_ytdlp_fallback: bool = True,
+    proxy_list: Optional[List[str]] = None,
 ) -> tuple:
     """
-    Video ID için transkript döner.
-    Önce youtube-transcript-api dener; başarısız olursa yt-dlp fallback kullanır.
-    Returns: (segments, error_message)
+    Proxy rotation: proxy_list içindeki her proxy ile dener; hepsi başarısızsa
+    son çare olarak proxy olmadan (kendi IP) bir kez daha dener.
     """
-    segments, error = _fetch_transcript_youtube_api(video_id, cookies_path, languages)
-    if segments:
-        return segments, None
+    proxy_list = proxy_list or []
+    last_error = None
 
-    if use_ytdlp_fallback:
-        ytdlp_segments, ytdlp_error = _fetch_transcript_ytdlp(video_id, languages)
-        if ytdlp_segments:
-            return ytdlp_segments, None
-        error = error or ytdlp_error
+    for proxy in proxy_list:
+        try:
+            segments, error = _try_with_proxy(
+                video_id, cookies_path, languages, use_ytdlp_fallback, proxy
+            )
+            if segments:
+                return segments, None
+            last_error = error
+        except Exception as e:
+            print(f"Proxy başarısız oldu: {proxy}. Bir sonraki deneniyor...", file=sys.stderr)
+            continue
 
-    return [], error
+    # Son çare: proxy olmadan (direct) dene
+    try:
+        segments, error = _try_with_proxy(
+            video_id, cookies_path, languages, use_ytdlp_fallback, None
+        )
+        if segments:
+            return segments, None
+        last_error = error
+    except Exception as e:
+        last_error = str(e)
+
+    return [], last_error
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(
-        description="YouTube video transkriptini çeker (youtube-transcript-api)"
-    )
+    parser = argparse.ArgumentParser(description="YouTube video transkriptini çeker")
+    parser.add_argument("video", help="Video ID veya YouTube URL")
+    parser.add_argument("-c", "--cookies", default="cookies.txt", help="cookies.txt dosya yolu")
+    parser.add_argument("--no-cookies", action="store_true", help="Cookies kullanma")
+    parser.add_argument("-l", "--languages", default="tr,en", help="Dil kodları (virgülle)")
+    parser.add_argument("-o", "--output", help="Çıktıyı dosyaya yaz (JSON)")
+    parser.add_argument("--no-fallback", action="store_true", help="yt-dlp fallback kullanma")
     parser.add_argument(
-        "video",
-        help="Video ID veya YouTube URL (örn: dQw4w9WgXcQ veya https://youtube.com/watch?v=dQw4w9WgXcQ)",
-    )
-    parser.add_argument(
-        "-c",
-        "--cookies",
-        default="cookies.txt",
-        help="Netscape formatında cookies.txt dosya yolu (varsayılan: cookies.txt)",
-    )
-    parser.add_argument(
-        "--no-cookies",
-        action="store_true",
-        help="Cookies kullanma",
-    )
-    parser.add_argument(
-        "-l",
-        "--languages",
-        default="tr,en",
-        help="Öncelik sırasına göre dil kodları (virgülle ayrılmış, varsayılan: tr,en)",
-    )
-    parser.add_argument(
-        "-o",
-        "--output",
-        help="Çıktıyı dosyaya yaz (JSON)",
-    )
-    parser.add_argument(
-        "--no-fallback",
-        action="store_true",
-        help="yt-dlp fallback kullanma (sadece youtube-transcript-api)",
-    )
-    parser.add_argument(
-        "--clean",
-        action="store_true",
-        help="Metni temizle (zaman damgası, HTML, tekrarlar, [Music] vb.)",
-    )
-    parser.add_argument(
-        "--no-sound-effects",
-        action="store_true",
-        help="Ses efektlerini sakla, [Music]/[Applause] kaldırma (--clean ile)",
-    )
-    parser.add_argument(
-        "--paragraphs",
-        action="store_true",
-        help="Temiz metni paragraflara böl (--clean ile, her 5 cümle/500 karakter)",
+        "--proxy",
+        default=None,
+        help="Tek proxy veya virgülle ayrılmış liste (örn: http://user:pass@ip:port)",
     )
     args = parser.parse_args()
 
@@ -426,9 +357,11 @@ def main() -> int:
 
     cookies_path = None if args.no_cookies else Path(args.cookies)
     if cookies_path and not cookies_path.is_file():
-        print(f"Uyarı: cookies.txt bulunamadı ({cookies_path}), cookies olmadan deneniyor.", file=sys.stderr)
         cookies_path = None
     cookies_str = str(cookies_path) if cookies_path else None
+
+    raw_proxy = (args.proxy or "").strip()
+    proxy_list = [p.strip() for p in raw_proxy.split(",") if p.strip()] if raw_proxy else []
 
     languages = tuple(l.strip() for l in args.languages.split(",") if l.strip()) or ("tr", "en")
     segments, error = fetch_transcript(
@@ -436,53 +369,23 @@ def main() -> int:
         cookies_path=cookies_str,
         languages=languages,
         use_ytdlp_fallback=not args.no_fallback,
+        proxy_list=proxy_list,
     )
 
     if error:
         print(f"Hata: {error}", file=sys.stderr)
         return 1
 
-    if args.clean:
-        try:
-            from utils.cleaner import clean_transcript
-        except ImportError:
-            sys.path.insert(0, str(ROOT))
-            from utils.cleaner import clean_transcript
-
-        cleaned = clean_transcript(
-            segments,
-            remove_sound_effects_flag=not args.no_sound_effects,
-            deduplicate_words=True,
-            split_paragraphs=args.paragraphs,
-        )
-        if args.output:
-            out_path = Path(args.output)
-            with open(out_path, "w", encoding="utf-8") as f:
-                if isinstance(cleaned, list):
-                    f.write("\n\n".join(cleaned))
-                else:
-                    f.write(cleaned)
-            print(f"Temiz transkript kaydedildi: {out_path}")
-        else:
-            if isinstance(cleaned, list):
-                for para in cleaned:
-                    print(para)
-                    print()
-            else:
-                print(cleaned)
-        return 0
-
     if args.output:
         out_path = Path(args.output)
         with open(out_path, "w", encoding="utf-8") as f:
             json.dump(segments, f, ensure_ascii=False, indent=2)
-        print(f"Transkript {len(segments)} segment olarak kaydedildi: {out_path}")
+        print(f"Transkript kaydedildi: {out_path}")
     else:
         for s in segments:
             t = s.get("text", "").strip()
             if t:
                 print(t)
-
     return 0
 
 
