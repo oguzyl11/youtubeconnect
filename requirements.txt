@@ -18,6 +18,16 @@ Pillow>=10.0.0
 # Health checks / monitoring (optional)
 django-health-check>=3.17.0
 
-# YouTube transcript: sadece ScrapingBee
+# FastAPI (app.py)
+fastapi>=0.109.0
+uvicorn[standard]>=0.27.0
+python-dotenv>=1.0.0
+
+# YouTube transcript (fetch_transcript.py)
+youtube-transcript-api>=0.6.0
+yt-dlp>=2024.1.0
+requests>=2.28.0
+
+# YouTube transcript: ScrapingBee
 scrapingbee>=1.0.0
 beautifulsoup4>=4.12.0
