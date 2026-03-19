@@ -43,9 +43,7 @@ def extract_youtube_video_id(url: str) -> Optional[str]:
 
 def get_transcript_for_video(video_id: str) -> tuple[list, Optional[str]]:
     """
-    Video ID için transkript döner.
-    Yöntem: YouTube watch sayfasından ytInitialPlayerResponse çıkarılıp
-    timedtext API (baseUrl) ile altyazı indirilir. API anahtarı gerekmez.
+    Video ID için transkript döner (yalnızca Supadata API).
     Returns: (segments, error_message)
     """
     prefix = getattr(settings, "TRANSCRIPT_CACHE_KEY_PREFIX", "yt_transcript:")
@@ -57,8 +55,8 @@ def get_transcript_for_video(video_id: str) -> tuple[list, Optional[str]]:
         return cached, None
 
     try:
-        from config.transcript_timedtext import fetch_transcript_timedtext
-        result, error = fetch_transcript_timedtext(video_id)
+        from config.transcript_supadata import fetch_transcript_supadata
+        result, error = fetch_transcript_supadata(video_id)
     except Exception as e:
         return [], str(e)
 

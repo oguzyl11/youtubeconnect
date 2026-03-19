@@ -131,8 +131,17 @@ TRANSCRIPT_CACHE_KEY_PREFIX = "yt_transcript:"
 # API rate limit: dakikada en fazla istek (IP başına)
 TRANSCRIPT_RATE_LIMIT_PER_MINUTE = 10
 
-# Transkript: varsayılan yöntem timedtext (sayfa HTML + timedtext API, API anahtarı gerekmez)
-# ScrapingBee modülü hâlâ mevcut; isteğe bağlı fallback için kullanılabilir
+# Transkript: yalnızca Supadata (https://supadata.ai)
+SUPADATA_API_KEY = (env("SUPADATA_API_KEY", default="") or "").strip() or None
+SUPADATA_BASE_URL = env("SUPADATA_BASE_URL", default="https://api.supadata.ai/v1")
+SUPADATA_TRANSCRIPT_MODE = env(
+    "SUPADATA_TRANSCRIPT_MODE", default="auto"
+)  # native | auto | generate
+SUPADATA_JOB_POLL_MAX_SEC = env.int(
+    "SUPADATA_JOB_POLL_MAX_SEC", default=280
+)  # async işler; nginx timeout altında tutun
+
+# ScrapingBee modülü repoda duruyor; transkript zincirinde kullanılmıyor
 SCRAPINGBEE_API_KEY = (os.environ.get("SCRAPINGBEE_API_KEY") or "").strip() or None
 SCRAPINGBEE_PREMIUM_PROXY = env.bool("SCRAPINGBEE_PREMIUM_PROXY", default=False)
 SCRAPINGBEE_TIMEOUT = env.int("SCRAPINGBEE_TIMEOUT", default=90000)

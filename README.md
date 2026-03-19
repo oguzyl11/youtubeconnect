@@ -54,7 +54,7 @@ YouTube kendi arayüzünde transkripti gösteriyor (“…” → “Show transc
 - Kurulum: Chrome’da `chrome://extensions/` → Geliştirici modu → “Paketlenmemiş öğe yükle” → `chrome-extension` klasörünü seçin.
 - Detay: `chrome-extension/README.md`
 
-**Transkript (varsayılan):** API anahtarı gerekmez. YouTube watch sayfası HTML'den çekilir, `ytInitialPlayerResponse` içinden altyazı adresi (`baseUrl`) alınır, `timedtext` API ile metin indirilir (anthiago.com / youtube-transcript-api tarzı).
+**Transkript (sunucu):** [Supadata](https://supadata.ai) API kullanılır. `.env` içinde `SUPADATA_API_KEY` zorunludur. Uzun videolar async işlenebilir; Nginx `proxy_read_timeout` değerini yeterli tutun (`.env` içindeki `SUPADATA_JOB_POLL_MAX_SEC` ile uyumlu).
 
 ## Proje yapısı
 
@@ -76,5 +76,8 @@ YouTube kendi arayüzünde transkripti gösteriyor (“…” → “Show transc
 | DATABASE_URL | PostgreSQL (yoksa SQLite) |
 | PORT | Dış port (varsayılan 8000) |
 | GUNICORN_WORKERS | Worker sayısı (varsayılan 3) |
-| SCRAPINGBEE_API_KEY | İsteğe bağlı; transkript varsayılan olarak sayfa + timedtext ile alınır |
+| SUPADATA_API_KEY | Transkript için zorunlu (Supadata) |
+| SUPADATA_TRANSCRIPT_MODE | `native`, `auto` veya `generate` (varsayılan: `auto`) |
+| SUPADATA_JOB_POLL_MAX_SEC | Async transkript için en fazla bekleme (saniye) |
+| SCRAPINGBEE_API_KEY | İsteğe bağlı; yalnızca `transcript_scrapingbee` modülü için |
 | CORS_ALLOWED_ORIGINS, CSRF_TRUSTED_ORIGINS | CORS/CSRF (canlıda domain ekleyin) |

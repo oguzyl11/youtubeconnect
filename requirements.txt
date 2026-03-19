@@ -18,6 +18,8 @@ Pillow>=10.0.0
 # Health checks / monitoring (optional)
 django-health-check>=3.17.0
 
-# YouTube transcript: sadece ScrapingBee
+# YouTube transcript: Supadata API
+supadata>=1.6.0
+# Eski ScrapingBee modülü (transcript_scrapingbee.py); transkriptte kullanılmıyor
 scrapingbee>=1.0.0
 beautifulsoup4>=4.12.0
